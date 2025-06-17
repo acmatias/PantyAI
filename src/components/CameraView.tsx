@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Camera, RefreshCw, AlertCircle, Settings, HelpCircle } from 'lucide-react';
+import { Camera, RefreshCw, AlertCircle, Settings, HelpCircle, User, LogOut } from 'lucide-react';
 import { useCamera } from '../hooks/useCamera';
+import { User as UserType } from '@supabase/supabase-js';
 
 interface CameraViewProps {
   onCapture: (imageData: string) => void;
   isProcessing: boolean;
+  user: UserType | null;
+  onShowAuth: () => void;
 }
 
-export const CameraView: React.FC<CameraViewProps> = ({ onCapture, isProcessing }) => {
+export const CameraView: React.FC<CameraViewProps> = ({ 
+  onCapture, 
+  isProcessing, 
+  user, 
+  onShowAuth 
+}) => {
   const { 
     videoRef, 
     canvasRef, 
@@ -107,6 +115,20 @@ export const CameraView: React.FC<CameraViewProps> = ({ onCapture, isProcessing 
           >
             <HelpCircle className="w-5 h-5" />
           </button>
+          {user ? (
+            <div className="flex items-center gap-2 text-sm">
+              <User className="w-4 h-4" />
+              <span className="hidden sm:inline">{user.email}</span>
+            </div>
+          ) : (
+            <button
+              onClick={onShowAuth}
+              className="flex items-center gap-2 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm transition-colors"
+            >
+              <User className="w-4 h-4" />
+              Sign In
+            </button>
+          )}
         </div>
       </div>
 
@@ -183,10 +205,15 @@ export const CameraView: React.FC<CameraViewProps> = ({ onCapture, isProcessing 
 
       {/* Instructions */}
       {!error && (
-        <div className="px-6 py-4 text-center text-white/80">
-          <p className="text-sm mb-4">
+        <div className="px-6 py-4 text-center">
+          <p className="text-sm text-white/80 mb-2">
             Position pantry items within the frame and tap capture
           </p>
+          {!user && (
+            <p className="text-xs text-yellow-400">
+              Sign in to save your captured items to your pantry
+            </p>
+          )}
         </div>
       )}
 

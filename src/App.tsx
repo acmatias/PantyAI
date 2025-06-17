@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { CameraView } from './components/CameraView';
 import { ProcessingView } from './components/ProcessingView';
 import { ConfirmationView } from './components/ConfirmationView';
+import { AuthModal } from './components/AuthModal';
 import { useVisionAI } from './hooks/useVisionAI';
+import { useAuth } from './hooks/useAuth';
+import { usePantryItems } from './hooks/usePantryItems';
 import { CaptureState, PantryItem } from './types';
+import { User, LogOut, Package } from 'lucide-react';
 
 function App() {
   const [captureState, setCaptureState] = useState<CaptureState>({
@@ -11,8 +15,11 @@ function App() {
     detectedItems: [],
     isLoading: false
   });
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const { analyzeImage, isAnalyzing, error } = useVisionAI();
+  const { user, loading: authLoading, signOut } = useAuth();
+  const { savePantryItems, isSaving, error: saveError } = usePantryItems();
 
   const handleCapture = async (imageData: string) => {
     setCaptureState(prev => ({
@@ -40,17 +47,25 @@ function App() {
     }
   };
 
-  const handleSave = (items: PantryItem[]) => {
-    // TODO: Save to Supabase
-    console.log('Saving items:', items);
-    alert(`Successfully identified ${items.length} items! (Supabase integration coming next)`);
+  const handleSave = async (items: PantryItem[]) => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    const success = await savePantryItems(items);
     
-    // Reset to camera view
-    setCaptureState({
-      step: 'camera',
-      detectedItems: [],
-      isLoading: false
-    });
+    if (success) {
+      alert(`Successfully saved ${items.length} items to your pantry!`);
+      // Reset to camera view
+      setCaptureState({
+        step: 'camera',
+        detectedItems: [],
+        isLoading: false
+      });
+    } else {
+      alert(`Failed to save items: ${saveError || 'Unknown error'}`);
+    }
   };
 
   const handleRetake = () => {
@@ -61,26 +76,95 @@ function App() {
     });
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-white text-center">
+          <Package className="w-12 h-12 mx-auto mb-4 animate-pulse" />
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const renderHeader = () => (
+    <div className="flex items-center justify-between p-4 text-white bg-gray-900">
+      <h1 className="text-xl font-semibold">Pantry Capture</h1>
+      <div className="flex items-center gap-3">
+        {user ? (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <User className="w-4 h-4" />
+              <span className="hidden sm:inline">{user.email}</span>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-2 px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="flex items-center gap-2 px-3 py-1 text-sm bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+          >
+            <User className="w-4 h-4" />
+            Sign In
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   if (captureState.step === 'processing') {
-    return <ProcessingView />;
+    return (
+      <div className="min-h-screen bg-gray-900">
+        {renderHeader()}
+        <ProcessingView />
+      </div>
+    );
   }
 
   if (captureState.step === 'confirmation' && captureState.capturedImage) {
     return (
-      <ConfirmationView
-        capturedImage={captureState.capturedImage}
-        detectedItems={captureState.detectedItems}
-        onSave={handleSave}
-        onRetake={handleRetake}
-      />
+      <div className="min-h-screen bg-gray-50">
+        {renderHeader()}
+        <ConfirmationView
+          capturedImage={captureState.capturedImage}
+          detectedItems={captureState.detectedItems}
+          onSave={handleSave}
+          onRetake={handleRetake}
+          isSaving={isSaving}
+          user={user}
+        />
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+        />
+      </div>
     );
   }
 
   return (
-    <CameraView
-      onCapture={handleCapture}
-      isProcessing={captureState.isLoading || isAnalyzing}
-    />
+    <div className="min-h-screen bg-gray-900">
+      <CameraView
+        onCapture={handleCapture}
+        isProcessing={captureState.isLoading || isAnalyzing}
+        user={user}
+        onShowAuth={() => setShowAuthModal(true)}
+      />
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
+    </div>
   );
 }
 

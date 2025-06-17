@@ -1,19 +1,24 @@
 import React, { useState } from 'react';
-import { Check, Edit3, Trash2, Plus, Camera, Package } from 'lucide-react';
+import { Check, Edit3, Trash2, Plus, Camera, Package, User, Loader2 } from 'lucide-react';
 import { PantryItem } from '../types';
+import { User as UserType } from '@supabase/supabase-js';
 
 interface ConfirmationViewProps {
   capturedImage: string;
   detectedItems: PantryItem[];
   onSave: (items: PantryItem[]) => void;
   onRetake: () => void;
+  isSaving?: boolean;
+  user: UserType | null;
 }
 
 export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
   capturedImage,
   detectedItems,
   onSave,
-  onRetake
+  onRetake,
+  isSaving = false,
+  user
 }) => {
   const [items, setItems] = useState<PantryItem[]>(detectedItems);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -55,16 +60,14 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
     return 'text-red-600 bg-red-100';
   };
 
+  const validItems = items.filter(item => 
+    item.name && 
+    item.name.trim() !== '' && 
+    item.name !== 'No food items detected'
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Confirm Items</h1>
-          <p className="text-gray-600 mt-1">Review and edit detected pantry items</p>
-        </div>
-      </div>
-
       <div className="max-w-4xl mx-auto p-4 grid gap-6 lg:grid-cols-2">
         {/* Captured Image */}
         <div className="space-y-4">
@@ -77,7 +80,8 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
             <div className="p-4">
               <button
                 onClick={onRetake}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                disabled={isSaving}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 disabled:text-gray-400 transition-colors"
               >
                 <Camera className="w-4 h-4" />
                 Retake Photo
@@ -91,11 +95,12 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Package className="w-5 h-5" />
-              Detected Items ({items.length})
+              Detected Items ({validItems.length})
             </h2>
             <button
               onClick={handleAddItem}
-              className="flex items-center gap-2 px-3 py-1 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+              disabled={isSaving}
+              className="flex items-center gap-2 px-3 py-1 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-400 transition-colors"
             >
               <Plus className="w-4 h-4" />
               Add Item
@@ -132,9 +137,11 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
                               {item.category}
                             </span>
                           )}
-                          <span className={`text-xs px-2 py-1 rounded ${getConfidenceColor(item.confidence)}`}>
-                            {Math.round(item.confidence * 100)}% confident
-                          </span>
+                          {item.confidence > 0 && (
+                            <span className={`text-xs px-2 py-1 rounded ${getConfidenceColor(item.confidence)}`}>
+                              {Math.round(item.confidence * 100)}% confident
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
@@ -143,13 +150,15 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
                   <div className="flex items-center gap-1 ml-4">
                     <button
                       onClick={() => handleEdit(item)}
-                      className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                      disabled={isSaving}
+                      className="p-2 text-gray-400 hover:text-gray-600 disabled:text-gray-300 transition-colors"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(item.id)}
-                      className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                      disabled={isSaving}
+                      className="p-2 text-gray-400 hover:text-red-600 disabled:text-gray-300 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -165,10 +174,26 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
               <p>No items detected</p>
               <button
                 onClick={handleAddItem}
-                className="mt-2 text-emerald-600 hover:text-emerald-700 font-medium"
+                disabled={isSaving}
+                className="mt-2 text-emerald-600 hover:text-emerald-700 disabled:text-gray-400 font-medium"
               >
                 Add items manually
               </button>
+            </div>
+          )}
+
+          {/* Auth Notice */}
+          {!user && validItems.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <User className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-blue-900">Sign in to save items</h3>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Create an account or sign in to save these items to your pantry.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -176,16 +201,26 @@ export const ConfirmationView: React.FC<ConfirmationViewProps> = ({
           <div className="flex gap-3 pt-4">
             <button
               onClick={onRetake}
-              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              disabled={isSaving}
+              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 transition-colors font-medium"
             >
               Retake Photo
             </button>
             <button
               onClick={() => onSave(items)}
-              disabled={items.length === 0}
+              disabled={validItems.length === 0 || isSaving}
               className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
             >
-              Save Items ({items.length})
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  {user ? 'Save Items' : 'Sign In & Save'} ({validItems.length})
+                </>
+              )}
             </button>
           </div>
         </div>
