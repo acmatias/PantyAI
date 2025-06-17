@@ -31,7 +31,7 @@ Visit the live application: [https://loquacious-kelpie-24c290.netlify.app](https
 1. **Clone or download the project**
    ```bash
    # If you have git access to the repository
-   git clone <repository-url>
+   git clone https://github.com/acmatias/PantyAI.git
    cd pantry-capture-app
    
    # Or download and extract the project files
