@@ -29,20 +29,35 @@ interface VisionResponse {
 }
 
 const FOOD_CATEGORIES = {
-  'Fruit': ['apple', 'banana', 'orange', 'grape', 'berry', 'lemon', 'lime', 'peach', 'pear', 'cherry'],
-  'Vegetables': ['carrot', 'broccoli', 'spinach', 'lettuce', 'tomato', 'cucumber', 'pepper', 'onion', 'garlic', 'potato'],
-  'Dairy': ['milk', 'cheese', 'yogurt', 'butter', 'cream'],
-  'Meat': ['chicken', 'beef', 'pork', 'fish', 'turkey', 'ham', 'bacon'],
-  'Bakery': ['bread', 'bagel', 'muffin', 'croissant', 'roll'],
-  'Pantry': ['rice', 'pasta', 'cereal', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'spice'],
-  'Beverages': ['juice', 'soda', 'water', 'coffee', 'tea'],
-  'Snacks': ['chips', 'crackers', 'nuts', 'cookies', 'candy'],
-  'Frozen': ['ice cream', 'frozen'],
-  'Canned': ['can', 'jar', 'bottle']
+  'Fruit': ['apple', 'banana', 'orange', 'grape', 'berry', 'lemon', 'lime', 'peach', 'pear', 'cherry', 'strawberry', 'blueberry', 'kiwi', 'mango', 'pineapple'],
+  'Vegetables': ['carrot', 'broccoli', 'spinach', 'lettuce', 'tomato', 'cucumber', 'pepper', 'onion', 'garlic', 'potato', 'celery', 'cabbage', 'corn', 'peas', 'beans'],
+  'Dairy': ['milk', 'cheese', 'yogurt', 'butter', 'cream', 'dairy', 'cheddar', 'mozzarella'],
+  'Meat': ['chicken', 'beef', 'pork', 'fish', 'turkey', 'ham', 'bacon', 'salmon', 'tuna', 'meat'],
+  'Bakery': ['bread', 'bagel', 'muffin', 'croissant', 'roll', 'baguette', 'toast', 'loaf'],
+  'Pantry': ['rice', 'pasta', 'cereal', 'flour', 'sugar', 'salt', 'oil', 'vinegar', 'sauce', 'spice', 'noodles', 'grain'],
+  'Beverages': ['juice', 'soda', 'water', 'coffee', 'tea', 'drink', 'beverage', 'cola'],
+  'Snacks': ['chips', 'crackers', 'nuts', 'cookies', 'candy', 'chocolate', 'popcorn', 'pretzels'],
+  'Frozen': ['ice cream', 'frozen', 'popsicle'],
+  'Canned': ['can', 'jar', 'bottle', 'canned', 'jarred']
 }
+
+// Items that should be explicitly excluded (non-food items commonly detected)
+const NON_FOOD_EXCLUSIONS = [
+  'plastic', 'container', 'package', 'packaging', 'wrapper', 'bag', 'box', 'carton',
+  'table', 'counter', 'shelf', 'surface', 'kitchen', 'refrigerator', 'cabinet',
+  'hand', 'finger', 'person', 'human', 'face', 'clothing', 'shirt',
+  'paper', 'label', 'text', 'writing', 'logo', 'brand', 'barcode',
+  'phone', 'camera', 'device', 'electronic', 'appliance',
+  'wall', 'floor', 'ceiling', 'door', 'window', 'light', 'shadow'
+]
 
 function categorizeItem(itemName: string): string {
   const lowerName = itemName.toLowerCase()
+  
+  // First check if it's explicitly excluded
+  if (NON_FOOD_EXCLUSIONS.some(exclusion => lowerName.includes(exclusion))) {
+    return 'Excluded'
+  }
   
   for (const [category, keywords] of Object.entries(FOOD_CATEGORIES)) {
     if (keywords.some(keyword => lowerName.includes(keyword))) {
@@ -66,12 +81,17 @@ function extractFoodItemsFromText(text: string): Array<{ name: string, confidenc
       if (word.includes(keyword) || keyword.includes(word)) {
         // Capitalize first letter
         const itemName = word.charAt(0).toUpperCase() + word.slice(1)
-        foodItems.push({
-          name: itemName,
-          confidence: 0.8, // High confidence for text-based detection
-          category: categorizeItem(word),
-          source: 'text'
-        })
+        const category = categorizeItem(word)
+        
+        // Only add if it's not excluded or categorized as 'Other'
+        if (category !== 'Excluded' && category !== 'Other') {
+          foodItems.push({
+            name: itemName,
+            confidence: 0.8, // High confidence for text-based detection
+            category: category,
+            source: 'text'
+          })
+        }
         break
       }
     }
@@ -92,17 +112,27 @@ function filterFoodItems(labels: Array<{ description: string, score: number }>):
   return labels
     .filter(label => {
       const name = label.description.toLowerCase()
+      
+      // Exclude non-food items explicitly
+      if (NON_FOOD_EXCLUSIONS.some(exclusion => name.includes(exclusion))) {
+        return false
+      }
+      
       return foodKeywords.some(keyword => name.includes(keyword)) || 
              generalFoodTerms.some(term => name.includes(term)) ||
-             label.score > 0.8 // High confidence items
+             label.score > 0.85 // Higher confidence threshold for non-keyword matches
     })
-    .filter(label => label.score > 0.5) // Minimum confidence threshold
-    .map(label => ({
-      name: label.description,
-      confidence: label.score,
-      category: categorizeItem(label.description),
-      source: 'vision'
-    }))
+    .filter(label => label.score > 0.6) // Slightly higher minimum confidence threshold
+    .map(label => {
+      const category = categorizeItem(label.description)
+      return {
+        name: label.description,
+        confidence: label.score,
+        category: category,
+        source: 'vision'
+      }
+    })
+    .filter(item => item.category !== 'Excluded' && item.category !== 'Other') // Filter out non-food items
     .slice(0, 10) // Limit to top 10 items
 }
 
@@ -154,11 +184,11 @@ serve(async (req) => {
               features: [
                 {
                   type: 'LABEL_DETECTION',
-                  maxResults: 20
+                  maxResults: 25
                 },
                 {
                   type: 'OBJECT_LOCALIZATION',
-                  maxResults: 10
+                  maxResults: 15
                 },
                 {
                   type: 'TEXT_DETECTION',
@@ -229,8 +259,31 @@ serve(async (req) => {
       return acc
     }, [] as Array<{ name: string, confidence: number, category: string, source: string }>)
     
+    // Final filtering: Remove any remaining non-food items and "Other" category items
+    const finalFoodItems = uniqueFoodItems.filter(item => {
+      const category = item.category
+      const name = item.name.toLowerCase()
+      
+      // Exclude items categorized as 'Other' or 'Excluded'
+      if (category === 'Other' || category === 'Excluded') {
+        return false
+      }
+      
+      // Double-check against exclusion list
+      if (NON_FOOD_EXCLUSIONS.some(exclusion => name.includes(exclusion))) {
+        return false
+      }
+      
+      // Ensure minimum confidence for food items
+      if (item.confidence < 0.5) {
+        return false
+      }
+      
+      return true
+    })
+    
     // Convert to PantryItem format
-    const pantryItems = uniqueFoodItems.map((item, index) => ({
+    const pantryItems = finalFoodItems.map((item, index) => ({
       id: (Date.now() + index).toString(),
       name: item.name,
       confidence: item.confidence,
@@ -257,7 +310,8 @@ serve(async (req) => {
         analysis: {
           visionItems: visionFoodItems.length,
           textItems: textFoodItems.length,
-          totalUniqueItems: pantryItems.length
+          totalUniqueItems: finalFoodItems.length,
+          finalFilteredItems: pantryItems.length
         }
       }),
       { 
