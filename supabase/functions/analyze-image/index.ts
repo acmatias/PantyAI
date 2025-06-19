@@ -87,7 +87,7 @@ function extractFoodItemsFromText(text: string): Array<{ name: string, confidenc
         if (category !== 'Excluded' && category !== 'Other') {
           foodItems.push({
             name: itemName,
-            confidence: 0.8, // High confidence for text-based detection
+            confidence: 0.85, // Increased confidence for text-based detection (was 0.8)
             category: category,
             source: 'text'
           })
@@ -120,9 +120,9 @@ function filterFoodItems(labels: Array<{ description: string, score: number }>):
       
       return foodKeywords.some(keyword => name.includes(keyword)) || 
              generalFoodTerms.some(term => name.includes(term)) ||
-             label.score > 0.85 // Higher confidence threshold for non-keyword matches
+             label.score > 0.92 // Increased confidence threshold for non-keyword matches (was 0.85)
     })
-    .filter(label => label.score > 0.6) // Slightly higher minimum confidence threshold
+    .filter(label => label.score > 0.75) // Increased minimum confidence threshold (was 0.6)
     .map(label => {
       const category = categorizeItem(label.description)
       return {
@@ -274,16 +274,21 @@ serve(async (req) => {
         return false
       }
       
-      // Ensure minimum confidence for food items
-      if (item.confidence < 0.5) {
+      // Increased minimum confidence for food items (was 0.5)
+      if (item.confidence < 0.7) {
         return false
       }
       
       return true
     })
     
+    // Sort by confidence (highest first) and limit results
+    const sortedFoodItems = finalFoodItems
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 8) // Limit to top 8 most confident items
+    
     // Convert to PantryItem format
-    const pantryItems = finalFoodItems.map((item, index) => ({
+    const pantryItems = sortedFoodItems.map((item, index) => ({
       id: (Date.now() + index).toString(),
       name: item.name,
       confidence: item.confidence,
@@ -311,7 +316,13 @@ serve(async (req) => {
           visionItems: visionFoodItems.length,
           textItems: textFoodItems.length,
           totalUniqueItems: finalFoodItems.length,
-          finalFilteredItems: pantryItems.length
+          finalFilteredItems: pantryItems.length,
+          confidenceThresholds: {
+            visionMinimum: 0.75,
+            visionHighConfidence: 0.92,
+            textDetection: 0.85,
+            finalMinimum: 0.7
+          }
         }
       }),
       { 
