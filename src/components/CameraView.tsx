@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Camera, RefreshCw, AlertCircle, Settings, HelpCircle, User, LogOut } from 'lucide-react';
+import { Camera, RefreshCw, AlertCircle, Settings, HelpCircle, User, LogOut, Lock } from 'lucide-react';
 import { useCamera } from '../hooks/useCamera';
 import { User as UserType } from '@supabase/supabase-js';
 
@@ -8,13 +8,15 @@ interface CameraViewProps {
   isProcessing: boolean;
   user: UserType | null;
   onShowAuth: () => void;
+  hasUsedFreeTrial?: boolean;
 }
 
 export const CameraView: React.FC<CameraViewProps> = ({ 
   onCapture, 
   isProcessing, 
   user, 
-  onShowAuth 
+  onShowAuth,
+  hasUsedFreeTrial = false
 }) => {
   const { 
     videoRef, 
@@ -36,6 +38,12 @@ export const CameraView: React.FC<CameraViewProps> = ({
   }, [startCamera, stopCamera]);
 
   const handleCapture = () => {
+    // If user is not authenticated and has used free trial, show auth modal
+    if (!user && hasUsedFreeTrial) {
+      onShowAuth();
+      return;
+    }
+
     const imageData = captureImage();
     if (imageData) {
       setCaptureAnimation(true);
@@ -92,6 +100,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
     return error ? [...(specificSteps[error.type] || []), ...commonSteps] : commonSteps;
   };
+
+  const isCaptureLocked = !user && hasUsedFreeTrial;
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -175,17 +185,48 @@ export const CameraView: React.FC<CameraViewProps> = ({
               muted
               className={`w-full h-full object-cover transition-transform duration-300 ${
                 captureAnimation ? 'scale-105' : 'scale-100'
-              }`}
+              } ${isCaptureLocked ? 'brightness-50' : ''}`}
             />
             
             {/* Capture Overlay */}
             <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-6 border-2 border-white/30 rounded-2xl" />
-              <div className="absolute top-8 left-8 w-4 h-4 border-l-2 border-t-2 border-white" />
-              <div className="absolute top-8 right-8 w-4 h-4 border-r-2 border-t-2 border-white" />
-              <div className="absolute bottom-8 left-8 w-4 h-4 border-l-2 border-b-2 border-white" />
-              <div className="absolute bottom-8 right-8 w-4 h-4 border-r-2 border-b-2 border-white" />
+              <div className={`absolute inset-6 border-2 rounded-2xl ${
+                isCaptureLocked ? 'border-red-400/50' : 'border-white/30'
+              }`} />
+              <div className={`absolute top-8 left-8 w-4 h-4 border-l-2 border-t-2 ${
+                isCaptureLocked ? 'border-red-400' : 'border-white'
+              }`} />
+              <div className={`absolute top-8 right-8 w-4 h-4 border-r-2 border-t-2 ${
+                isCaptureLocked ? 'border-red-400' : 'border-white'
+              }`} />
+              <div className={`absolute bottom-8 left-8 w-4 h-4 border-l-2 border-b-2 ${
+                isCaptureLocked ? 'border-red-400' : 'border-white'
+              }`} />
+              <div className={`absolute bottom-8 right-8 w-4 h-4 border-r-2 border-b-2 ${
+                isCaptureLocked ? 'border-red-400' : 'border-white'
+              }`} />
             </div>
+
+            {/* Free Trial Used Overlay */}
+            {isCaptureLocked && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <div className="bg-white rounded-xl p-6 max-w-sm mx-4 text-center">
+                  <Lock className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Free Trial Used
+                  </h3>
+                  <p className="text-gray-600 mb-4">
+                    You've used your one free capture. Sign in or create an account to continue using Pantry Capture.
+                  </p>
+                  <button
+                    onClick={onShowAuth}
+                    className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+                  >
+                    Sign In / Sign Up
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Flash Effect */}
             {captureAnimation && (
@@ -206,13 +247,34 @@ export const CameraView: React.FC<CameraViewProps> = ({
       {/* Instructions */}
       {!error && (
         <div className="px-6 py-4 text-center">
-          <p className="text-sm text-white/80 mb-2">
-            Position pantry items within the frame and tap capture
-          </p>
-          {!user && (
-            <p className="text-xs text-yellow-400">
-              Sign in to save your captured items to your pantry
-            </p>
+          {isCaptureLocked ? (
+            <div className="space-y-2">
+              <p className="text-sm text-red-400">
+                Free trial used - Sign in to continue
+              </p>
+              <button
+                onClick={onShowAuth}
+                className="text-sm text-emerald-400 hover:text-emerald-300 underline"
+              >
+                Sign In / Sign Up
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-white/80 mb-2">
+                Position pantry items within the frame and tap capture
+              </p>
+              {!user && !hasUsedFreeTrial && (
+                <p className="text-xs text-yellow-400">
+                  🎯 Free trial: Try once, then sign up to continue
+                </p>
+              )}
+              {!user && hasUsedFreeTrial && (
+                <p className="text-xs text-red-400">
+                  Free trial used - Sign in to continue
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
@@ -222,14 +284,18 @@ export const CameraView: React.FC<CameraViewProps> = ({
         <button
           onClick={handleCapture}
           disabled={!isStreamActive || isProcessing || error !== null}
-          className={`w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all duration-200 ${
-            isStreamActive && !isProcessing && !error
-              ? 'bg-emerald-600 hover:bg-emerald-700 active:scale-95'
-              : 'bg-gray-600 cursor-not-allowed'
+          className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-200 ${
+            isCaptureLocked
+              ? 'border-red-400 bg-red-600 cursor-pointer'
+              : isStreamActive && !isProcessing && !error
+              ? 'border-white bg-emerald-600 hover:bg-emerald-700 active:scale-95'
+              : 'border-white bg-gray-600 cursor-not-allowed'
           }`}
         >
           {isProcessing ? (
             <RefreshCw className="w-8 h-8 text-white animate-spin" />
+          ) : isCaptureLocked ? (
+            <Lock className="w-8 h-8 text-white" />
           ) : (
             <Camera className="w-8 h-8 text-white" />
           )}

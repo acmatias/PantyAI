@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CameraView } from './components/CameraView';
 import { ProcessingView } from './components/ProcessingView';
 import { ConfirmationView } from './components/ConfirmationView';
@@ -9,6 +9,8 @@ import { usePantryItems } from './hooks/usePantryItems';
 import { CaptureState, PantryItem } from './types';
 import { User, LogOut, Package } from 'lucide-react';
 
+const FREE_TRIAL_KEY = 'pantry_capture_free_trial_used';
+
 function App() {
   const [captureState, setCaptureState] = useState<CaptureState>({
     step: 'camera',
@@ -16,12 +18,36 @@ function App() {
     isLoading: false
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [hasUsedFreeTrial, setHasUsedFreeTrial] = useState(() => {
+    // Initialize from localStorage
+    return localStorage.getItem(FREE_TRIAL_KEY) === 'true';
+  });
 
   const { analyzeImage, isAnalyzing, error } = useVisionAI();
   const { user, loading: authLoading, signOut } = useAuth();
   const { savePantryItems, isSaving, error: saveError } = usePantryItems();
 
+  // Clear free trial status when user signs in
+  useEffect(() => {
+    if (user) {
+      localStorage.removeItem(FREE_TRIAL_KEY);
+      setHasUsedFreeTrial(false);
+    }
+  }, [user]);
+
   const handleCapture = async (imageData: string) => {
+    // Check if unauthenticated user has already used their free trial
+    if (!user && hasUsedFreeTrial) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // If unauthenticated user hasn't used free trial yet, mark it as used
+    if (!user && !hasUsedFreeTrial) {
+      localStorage.setItem(FREE_TRIAL_KEY, 'true');
+      setHasUsedFreeTrial(true);
+    }
+
     setCaptureState(prev => ({
       ...prev,
       step: 'processing',
@@ -159,6 +185,7 @@ function App() {
         isProcessing={captureState.isLoading || isAnalyzing}
         user={user}
         onShowAuth={() => setShowAuthModal(true)}
+        hasUsedFreeTrial={hasUsedFreeTrial}
       />
       <AuthModal
         isOpen={showAuthModal}
